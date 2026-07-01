@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Despesas</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card-bg: #ffffff;
+    --border: #e2e6ea;
+    --text: #1f2933;
+    --muted: #6b7785;
+    --accent: #2563eb;
+    --accent-light: #eaf0fe;
+    --danger: #dc2626;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 32px 60px;
+  }
+  header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin: 20px 0 28px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .card .value { font-size: 20px; font-weight: 600; margin-top: 4px; }
+  .card.total { border-color: var(--accent); background: var(--accent-light); }
+  .card.total .value { color: var(--accent); }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .toolbar input, .toolbar select {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+  }
+  .toolbar input[type="text"] { min-width: 220px; }
+  .toolbar .count { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+  }
+  thead th {
+    background: #1f2933;
+    color: #fff;
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { background: #33414d; }
+  thead th.sorted::after { content: " ▾"; }
+  tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr:hover { background: #fafbfc; }
+  td.num, th.num { text-align: right; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+  tfoot td {
+    padding: 10px 12px;
+    font-weight: 700;
+    background: #f0f2f5;
+    border-top: 2px solid var(--border);
+  }
+  .empty-msg {
+    text-align: center;
+    padding: 24px;
+    color: var(--muted);
+  }
+
+  .btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { background: #f0f2f5; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .file-status { font-size: 12px; color: var(--muted); }
+  .file-status.ok { color: #16a34a; }
+  .file-status.error { color: var(--danger); }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: -6px 0 16px;
+  }
+  .hint.error { color: var(--danger); }
+  .btn-icon {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    line-height: 1;
+  }
+  .btn-icon:hover { background: #fde8e8; }
+  th.actions-col, td.actions-col, th.check-col, td.check-col { text-align: center; }
+  th.check-col, td.check-col { width: 32px; cursor: default; }
+
+  .tabs { display: flex; gap: 8px; margin: 18px 0 16px; }
+  .tab-btn {
+    padding: 9px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab-btn:hover { background: #f0f2f5; }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .bulk-bar {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .btn-danger:hover { background: #b91c1c; }
+
+  #loginScreen {
+    max-width: 360px;
+    margin: 90px auto;
+    padding: 28px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  #loginScreen h2 { margin: 0 0 4px; font-size: 19px; }
+  #loginScreen .subtitle { margin-bottom: 20px; }
+  #loginScreen input {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  #loginScreen button { width: 100%; padding: 10px; margin-top: 4px; }
+
+  .user-badge { font-size: 12px; color: var(--muted); text-align: right; }
+  .user-badge button { margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h2>Controle de Despesas</h2>
+  <div class="subtitle">Entre com sua conta para acessar o painel compartilhado.</div>
+  <input type="email" id="loginEmail" placeholder="E-mail" autocomplete="username">
+  <input type="password" id="loginPassword" placeholder="Senha" autocomplete="current-password">
+  <button class="btn btn-primary" id="btnLogin">Entrar</button>
+  <div class="hint" id="loginStatus"></div>
+</div>
+
+<div id="appRoot" style="display:none">
+
+<header>
+  <div>
+    <h1>Controle de Despesas</h1>
+    <div class="subtitle" id="lastUpdate"></div>
+  </div>
+  <div class="user-badge">
+    <span id="userEmail"></span>
+    <button class="btn" id="btnLogout">Sair</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" id="tabDespesas" data-view="despesas">📋 Despesas</button>
+  <button class="tab-btn" id="tabRecebimentos" data-view="recebimentos">💰 Recebimentos</button>
+  <button class="tab-btn" id="tabResumo" data-view="resumo">📊 Resumo Mensal</button>
+</div>
+
+<div id="viewDespesas" class="view">
+
+<div class="cards" id="cards"></div>
+
+<div class="toolbar">
+  <button class="btn btn-primary" id="btnImport">📥 Importar despesas (PDF)</button>
+  <button class="btn" id="btnTemplate">📄 Baixar modelo CSV</button>
+  <input type="file" id="fileInput" accept=".pdf,.csv" style="display:none">
+  <input type="text" id="search" placeholder="Buscar fornecedor, descrição...">
+  <select id="filterEmpresa"></select>
+  <input type="date" id="filterDay" title="Filtrar por dia (vencimento)">
+  <select id="filterMonth" title="Filtrar por mês (vencimento)"></select>
+  <button class="btn" id="btnClearFilters">Limpar filtros</button>
+  <span class="count" id="count"></span>
+</div>
+<div class="hint" id="fileStatus">Importe direto o PDF "Relatório de contas a pagar" (ou um CSV no modelo). Os dados ficam no banco compartilhado e aparecem para todos na hora.</div>
+
+<div class="bulk-bar" id="bulkBar">
+  <span id="bulkCount"></span>
+  <button class="btn btn-danger" id="btnBulkDelete">🗑️ Excluir selecionadas</button>
+  <button class="btn" id="btnClearSelection">Cancelar seleção</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="check-col"><input type="checkbox" id="selectAll" title="Selecionar todas"></th>
+      <th data-key="empresa">Empresa</th>
+      <th data-key="fornecedor">Fornecedor</th>
+      <th data-key="cnpj">CNPJ</th>
+      <th data-key="descricao">Descrição</th>
+      <th data-key="dataVencimento">Vencimento</th>
+      <th data-key="situacao">Situação</th>
+      <th data-key="valor" class="num">Valor</th>
+      <th data-key="dataImportacao">Importado em</th>
+      <th data-key="arquivoOrigem">Arquivo</th>
+      <th class="actions-col">Ações</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+  <tfoot>
+    <tr>
+      <td colspan="7">Total (filtrado)</td>
+      <td class="num" id="footTotal"></td>
+      <td colspan="3"></td>
+    </tr>
+  </tfoot>
+</table>
+
+</div>
+
+<div id="viewRecebimentos" class="view" style="display:none">
+
+  <div class="cards" id="cardsReceb"></div>
+
+  <div class="toolbar">
+    <input type="text" id="recEmpresa" placeholder="Empresa" list="empresaList" style="width:150px;min-width:150px">
+    <datalist id="empresaList"></datalist>
+    <input type="date" id="recData" title="Data do recebimento">
+    <input type="text" id="recValor" placeholder="Valor (ex: 1234,56)" style="width:150px;min-width:150px">
+    <input type="text" id="recDescricao" placeholder="Descrição (opcional)">
+    <button class="btn btn-primary" id="btnAddRecebimento">➕ Adicionar recebimento</button>
+  </div>
+  <div class="hint" id="recStatus">Informe o valor recebido de cada empresa. Isso entra automaticamente no Resumo Mensal.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Data</th>
+        <th>Descrição</th>
+        <th class="num">Valor</th>
+        <th class="actions-col">Ações</th>
+      </tr>
+    </thead>
+    <tbody id="recTbody"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">Total</td>
+        <td class="num" id="recFootTotal"></td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+</div>
+
+<div id="viewResumo" class="view" style="display:none">
+  <h2 style="margin:8px 0 14px;font-size:18px;">Despesas por Mês (por vencimento)</h2>
+  <table>
+    <thead><tr id="resumoHead"></tr></thead>
+    <tbody id="resumoBody"></tbody>
+  </table>
+
+  <h2 style="margin:28px 0 14px;font-size:18px;">Recebimentos por Mês</h2>
+  <table>
+    <thead><tr id="resumoRecHead"></tr></thead>
+    <tbody id="resumoRecBody"></tbody>
+  </table>
+
+  <h2 style="margin:28px 0 14px;font-size:18px;">Saldo por Mês (Recebimentos − Despesas)</h2>
+  <table>
+    <thead><tr id="resumoSaldoHead"></tr></thead>
+    <tbody id="resumoSaldoBody"></tbody>
+  </table>
+</div>
+
+</div>
+
+<script src="vendor/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<script>
+  const SUPABASE_URL = 'https://pxgmnimomvtukidyfqri.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_bvMvS3PPd2g9kyPAvhsBsw_Tg_VtF91';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let data = [];
+  let recebimentos = [];
+  const fmtBRL = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const selectedIds = new Set();
+
+  function brToISO(br) {
+    const [d, m, y] = br.split('/');
+    return `${y}-${m}-${d}`;
+  }
+
+  function isoToBR(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  function monthLabel(iso) {
+    const [y, m] = iso.split('-');
+    return `${MESES[parseInt(m, 10) - 1]}/${y}`;
+  }
+
+  // ---------- Mapeamento entre linhas do Supabase (snake_case) e o app (camelCase) ----------
+
+  function fromDbDespesa(row) {
+    return {
+      id: row.id,
+      empresa: row.empresa,
+      fornecedor: row.fornecedor,
+      cnpj: row.cnpj || '',
+      descricao: row.descricao || '',
+      dataVencimento: isoToBR(row.data_vencimento),
+      situacao: row.situacao || 'Em aberto',
+      valor: Number(row.valor),
+      dataImportacao: isoToBR(row.data_importacao),
+      arquivoOrigem: row.arquivo_origem || ''
+    };
+  }
+
+  function toDbDespesaInsert(r) {
+    return {
+      empresa: r.empresa,
+      fornecedor: r.fornecedor,
+      cnpj: r.cnpj || null,
+      descricao: r.descricao || null,
+      data_vencimento: brToISO(r.dataVencimento),
+      situacao: r.situacao || 'Em aberto',
+      valor: r.valor,
+      data_importacao: brToISO(r.dataImportacao),
+      arquivo_origem: r.arquivoOrigem || null
+    };
+  }
+
+  function fromDbRecebimento(row) {
+    return {
+      id: row.id,
+      empresa: row.empresa,
+      data: isoToBR(row.data),
+      valor: Number(row.valor),
+      descricao: row.descricao || '',
+      dataLancamento: isoToBR(row.data_lancamento)
+    };
+  }
+
+  function toDbRecebimentoInsert(r) {
+    return {
+      empresa: r.empresa,
+      data: brToISO(r.data),
+      valor: r.valor,
+      descricao: r.descricao || null,
+      data_lancamento: brToISO(r.dataLancamento)
+    };
+  }
+
+  function upsertLocalDespesa(row) {
+    const idx = data.findIndex(r => r.id === row.id);
+    if (idx === -1) data.push(row); else data[idx] = row;
+  }
+  function removeLocalDespesa(id) {
+    const idx = data.findIndex(r => r.id === id);
+    if (idx !== -1) data.splice(idx, 1);
+    selectedIds.delete(id);
+  }
+  function upsertLocalRecebimento(row) {
+    const idx = recebimentos.findIndex(r => r.id === row.id);
+    if (idx === -1) recebimentos.push(row); else recebimentos[idx] = row;
+  }
+  function removeLocalRecebimento(id) {
+    const idx = recebimentos.findIndex(r => r.id === id);
+    if (idx !== -1) recebimentos.splice(idx, 1);
+  }
+
+  // ---------- Autenticação ----------
+
+  function showApp() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appRoot').style.display = '';
+  }
+  function showLogin() {
+    document.getElementById('loginScreen').style.display = '';
+    document.getElementById('appRoot').style.display = 'none';
+  }
+
+  document.getElementById('btnLogin').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const statusEl = document.getElementById('loginStatus');
+    if (!email || !password) { statusEl.textContent = 'Preencha e-mail e senha.'; statusEl.className = 'hint error'; return; }
+    statusEl.textContent = 'Entrando...';
+    statusEl.className = 'hint';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      statusEl.textContent = 'E-mail ou senha inválidos.';
+      statusEl.className = 'hint error';
+    }
+  });
+  document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btnLogin').click();
+  });
+  document.getElementById('btnLogout').addEventListener('click', () => sb.auth.signOut());
+
+  let realtimeReady = false;
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      showApp();
+      document.getElementById('userEmail').textContent = session.user.email;
+      loadData();
+      if (!realtimeReady) { subscribeRealtime(); realtimeReady = true; }
+    } else {
+      showLogin();
+    }
+  });
+
+  async function loadData() {
+    const [{ data: despRows, error: e1 }, { data: recRows, error: e2 }] = await Promise.all([
+      sb.from('despesas').select('*').order('data_vencimento', { ascending: false }),
+      sb.from('recebimentos').select('*').order('data', { ascending: false })
+    ]);
+    if (e1 || e2) {
+      alert('Erro ao carregar dados: ' + ((e1 || e2).message));
+      return;
+    }
+    data = despRows.map(fromDbDespesa);
+    recebimentos = recRows.map(fromDbRecebimento);
+    populateFilter();
+    render();
+    updateLastUpdate();
+  }
+
+  function subscribeRealtime() {
+    sb.channel('despesas-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'despesas' }, (payload) => {
+        upsertLocalDespesa(fromDbDespesa(payload.new));
+        populateFilter(); render(); updateLastUpdate();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'despesas' }, (payload) => {
+        removeLocalDespesa(payload.old.id);
+        populateFilter(); render(); updateLastUpdate();
+      })
+      .subscribe();
+
+    sb.channel('recebimentos-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'recebimentos' }, (payload) => {
+        upsertLocalRecebimento(fromDbRecebimento(payload.new));
+        if (document.getElementById('viewRecebimentos').style.display !== 'none') renderRecebimentos();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'recebimentos' }, (payload) => {
+        removeLocalRecebimento(payload.old.id);
+        if (document.getElementById('viewRecebimentos').style.display !== 'none') renderRecebimentos();
+      })
+      .subscribe();
+  }
+
+  // ---------- Despesas: filtros, tabela, cards ----------
+
+  function isFilterActive() {
+    return !!(
+      document.getElementById('search').value ||
+      document.getElementById('filterEmpresa').value ||
+      document.getElementById('filterDay').value ||
+      document.getElementById('filterMonth').value
+    );
+  }
+
+  function renderCards(rows) {
+    const byEmpresa = {};
+    let total = 0;
+    rows.forEach(r => {
+      byEmpresa[r.empresa] = (byEmpresa[r.empresa] || 0) + r.valor;
+      total += r.valor;
+    });
+    const cardsEl = document.getElementById('cards');
+    cardsEl.innerHTML = '';
+    Object.keys(byEmpresa).sort().forEach(emp => {
+      cardsEl.innerHTML += `<div class="card"><div class="label">${emp}</div><div class="value">${fmtBRL(byEmpresa[emp])}</div></div>`;
+    });
+    const totalLabel = isFilterActive() ? 'Total (filtro)' : 'Total Geral';
+    cardsEl.innerHTML += `<div class="card total"><div class="label">${totalLabel}</div><div class="value">${fmtBRL(total)}</div></div>`;
+  }
+
+  function populateFilter() {
+    const sel = document.getElementById('filterEmpresa');
+    const prevEmp = sel.value;
+    const empresas = [...new Set(data.map(r => r.empresa))].sort();
+    sel.innerHTML = '<option value="">Todas as empresas</option>' + empresas.map(e => `<option value="${e}">${e}</option>`).join('');
+    if (empresas.includes(prevEmp)) sel.value = prevEmp;
+
+    const monthSel = document.getElementById('filterMonth');
+    const prevMonth = monthSel.value;
+    const months = [...new Set(data.map(r => brToISO(r.dataVencimento).slice(0, 7)))].sort().reverse();
+    monthSel.innerHTML = '<option value="">Todos os meses</option>' + months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+    if (months.includes(prevMonth)) monthSel.value = prevMonth;
+  }
+
+  let sortKey = null, sortAsc = true;
+
+  function getFiltered() {
+    const q = document.getElementById('search').value.toLowerCase();
+    const emp = document.getElementById('filterEmpresa').value;
+    const day = document.getElementById('filterDay').value;
+    const month = document.getElementById('filterMonth').value;
+    let rows = data.filter(r => {
+      const iso = brToISO(r.dataVencimento);
+      if (emp && r.empresa !== emp) return false;
+      if (day && iso !== day) return false;
+      if (month && iso.slice(0, 7) !== month) return false;
+      if (q && !(r.fornecedor.toLowerCase().includes(q) || r.descricao.toLowerCase().includes(q) || r.cnpj.includes(q))) return false;
+      return true;
+    });
+    if (sortKey) {
+      rows.sort((a, b) => {
+        let va = a[sortKey], vb = b[sortKey];
+        if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+        if (va < vb) return sortAsc ? -1 : 1;
+        if (va > vb) return sortAsc ? 1 : -1;
+        return 0;
+      });
+    }
+    return rows;
+  }
+
+  function render() {
+    const rows = getFiltered();
+    renderCards(rows);
+    const tbody = document.getElementById('tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="11" class="empty-msg">Nenhuma despesa encontrada.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td class="check-col"><input type="checkbox" class="row-check" data-id="${r.id}" ${selectedIds.has(r.id) ? 'checked' : ''}></td>
+          <td><span class="badge">${r.empresa}</span></td>
+          <td>${r.fornecedor}</td>
+          <td>${r.cnpj}</td>
+          <td>${r.descricao}</td>
+          <td>${r.dataVencimento}</td>
+          <td>${r.situacao}</td>
+          <td class="num">${fmtBRL(r.valor)}</td>
+          <td>${r.dataImportacao}</td>
+          <td>${r.arquivoOrigem}</td>
+          <td class="actions-col"><button class="btn-icon btn-delete" data-id="${r.id}" title="Excluir despesa">🗑️</button></td>
+        </tr>`).join('');
+    }
+    document.getElementById('footTotal').textContent = fmtBRL(rows.reduce((s, r) => s + r.valor, 0));
+    document.getElementById('count').textContent = `${rows.length} de ${data.length} despesa(s)`;
+    updateSelectAllState(rows);
+    updateBulkBar();
+  }
+
+  document.querySelectorAll('thead th[data-key]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (sortKey === key) { sortAsc = !sortAsc; } else { sortKey = key; sortAsc = true; }
+      document.querySelectorAll('thead th').forEach(x => x.classList.remove('sorted'));
+      th.classList.add('sorted');
+      render();
+    });
+  });
+
+  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('filterEmpresa').addEventListener('change', render);
+  document.getElementById('filterDay').addEventListener('change', render);
+  document.getElementById('filterMonth').addEventListener('change', render);
+  document.getElementById('btnClearFilters').addEventListener('click', () => {
+    document.getElementById('search').value = '';
+    document.getElementById('filterEmpresa').value = '';
+    document.getElementById('filterDay').value = '';
+    document.getElementById('filterMonth').value = '';
+    render();
+  });
+
+  function updateLastUpdate() {
+    document.getElementById('lastUpdate').textContent = `${data.length} despesa(s) · ${recebimentos.length} recebimento(s) registrados`;
+  }
+
+  // ---------- Seleção múltipla e exclusão em lote ----------
+
+  function updateSelectAllState(rows) {
+    const cb = document.getElementById('selectAll');
+    const allChecked = rows.length > 0 && rows.every(r => selectedIds.has(r.id));
+    cb.checked = allChecked;
+    cb.indeterminate = !allChecked && rows.some(r => selectedIds.has(r.id));
+  }
+
+  function updateBulkBar() {
+    const bar = document.getElementById('bulkBar');
+    const n = selectedIds.size;
+    document.getElementById('bulkCount').textContent = `${n} selecionada(s)`;
+    bar.style.display = n > 0 ? 'flex' : 'none';
+  }
+
+  document.getElementById('selectAll').addEventListener('change', (e) => {
+    const rows = getFiltered();
+    if (e.target.checked) rows.forEach(r => selectedIds.add(r.id));
+    else rows.forEach(r => selectedIds.delete(r.id));
+    render();
+  });
+
+  document.getElementById('tbody').addEventListener('change', (e) => {
+    const cb = e.target.closest('.row-check');
+    if (!cb) return;
+    if (cb.checked) selectedIds.add(cb.dataset.id);
+    else selectedIds.delete(cb.dataset.id);
+    updateSelectAllState(getFiltered());
+    updateBulkBar();
+  });
+
+  document.getElementById('btnClearSelection').addEventListener('click', () => {
+    selectedIds.clear();
+    render();
+  });
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const ok = confirm(`Excluir ${ids.length} despesa(s) selecionada(s)? Essa ação não pode ser desfeita.`);
+    if (!ok) return;
+    setStatus(`Excluindo ${ids.length} despesa(s)...`);
+    const { error } = await sb.from('despesas').delete().in('id', ids);
+    if (error) { setStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    ids.forEach(removeLocalDespesa);
+    populateFilter(); render(); updateLastUpdate();
+    setStatus(`${ids.length} despesa(s) excluída(s) com sucesso.`, 'ok');
+  }
+
+  document.getElementById('btnBulkDelete').addEventListener('click', handleBulkDelete);
+
+  // ---------- Aba Recebimentos ----------
+
+  function setRecStatus(msg, type) {
+    const el = document.getElementById('recStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+
+  function knownEmpresas() {
+    return [...new Set([...data.map(r => r.empresa), ...recebimentos.map(r => r.empresa)])].sort();
+  }
+
+  function populateEmpresaDatalist() {
+    document.getElementById('empresaList').innerHTML = knownEmpresas().map(e => `<option value="${e}">`).join('');
+  }
+
+  function renderRecebimentos() {
+    populateEmpresaDatalist();
+    const rows = [...recebimentos].sort((a, b) => brToISO(b.data).localeCompare(brToISO(a.data)));
+
+    const byEmpresa = {};
+    let total = 0;
+    rows.forEach(r => { byEmpresa[r.empresa] = (byEmpresa[r.empresa] || 0) + r.valor; total += r.valor; });
+    const cardsEl = document.getElementById('cardsReceb');
+    cardsEl.innerHTML = Object.keys(byEmpresa).sort().map(emp =>
+      `<div class="card"><div class="label">${emp}</div><div class="value">${fmtBRL(byEmpresa[emp])}</div></div>`
+    ).join('') + `<div class="card total"><div class="label">Total Recebido</div><div class="value">${fmtBRL(total)}</div></div>`;
+
+    const tbody = document.getElementById('recTbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-msg">Nenhum recebimento lançado.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><span class="badge">${r.empresa}</span></td>
+          <td>${r.data}</td>
+          <td>${r.descricao || ''}</td>
+          <td class="num">${fmtBRL(r.valor)}</td>
+          <td class="actions-col"><button class="btn-icon btn-delete-rec" data-id="${r.id}" title="Excluir recebimento">🗑️</button></td>
+        </tr>`).join('');
+    }
+    document.getElementById('recFootTotal').textContent = fmtBRL(total);
+  }
+
+  async function handleAddRecebimento() {
+    const empresaEl = document.getElementById('recEmpresa');
+    const dataEl = document.getElementById('recData');
+    const valorEl = document.getElementById('recValor');
+    const descEl = document.getElementById('recDescricao');
+
+    const empresa = empresaEl.value.trim().toUpperCase();
+    const valor = parseValor(valorEl.value);
+    const dataBR = isoToBR(dataEl.value || new Date().toISOString().slice(0, 10));
+    const descricao = descEl.value.trim();
+
+    if (!empresa || isNaN(valor) || valor <= 0) {
+      setRecStatus('Preencha a empresa e um valor válido.', 'error');
+      return;
+    }
+
+    setRecStatus('Salvando...');
+    const novo = { empresa, data: dataBR, valor, descricao, dataLancamento: todayBR() };
+    const { data: inserted, error } = await sb.from('recebimentos').insert([toDbRecebimentoInsert(novo)]).select();
+    if (error) { setRecStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    upsertLocalRecebimento(fromDbRecebimento(inserted[0]));
+    renderRecebimentos();
+    setRecStatus('Recebimento adicionado com sucesso.', 'ok');
+
+    empresaEl.value = '';
+    valorEl.value = '';
+    descEl.value = '';
+  }
+
+  async function handleDeleteRecebimento(id) {
+    const row = recebimentos.find(r => r.id === id);
+    if (!row) return;
+    const ok = confirm(`Excluir este recebimento?\n\n${row.empresa} — ${row.data}\n${fmtBRL(row.valor)}`);
+    if (!ok) return;
+    setRecStatus('Excluindo...');
+    const { error } = await sb.from('recebimentos').delete().eq('id', id);
+    if (error) { setRecStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    removeLocalRecebimento(id);
+    renderRecebimentos();
+    setRecStatus('Recebimento excluído com sucesso.', 'ok');
+  }
+
+  document.getElementById('btnAddRecebimento').addEventListener('click', handleAddRecebimento);
+  document.getElementById('recTbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-rec');
+    if (!btn) return;
+    handleDeleteRecebimento(btn.dataset.id);
+  });
+
+  // ---------- Abas (Despesas / Recebimentos / Resumo Mensal) ----------
+
+  function computeByMonth(list, dateOf) {
+    const byMonth = {};
+    list.forEach(r => {
+      const iso = brToISO(dateOf(r)).slice(0, 7);
+      if (!byMonth[iso]) byMonth[iso] = { __total: 0 };
+      byMonth[iso][r.empresa] = (byMonth[iso][r.empresa] || 0) + r.valor;
+      byMonth[iso].__total += r.valor;
+    });
+    return byMonth;
+  }
+
+  function renderMonthTable(byMonth, empresas, months, headId, bodyId) {
+    document.getElementById(headId).innerHTML =
+      `<th>Mês</th>` + empresas.map(e => `<th class="num">${e}</th>`).join('') + `<th class="num">Total</th>`;
+
+    const body = document.getElementById(bodyId);
+    if (months.length === 0) {
+      body.innerHTML = `<tr><td colspan="${empresas.length + 2}" class="empty-msg">Sem dados.</td></tr>`;
+      return;
+    }
+
+    let rowsHtml = months.map(m => {
+      const row = byMonth[m] || { __total: 0 };
+      return `<tr><td>${monthLabel(m)}</td>` +
+        empresas.map(e => `<td class="num">${fmtBRL(row[e] || 0)}</td>`).join('') +
+        `<td class="num" style="font-weight:700">${fmtBRL(row.__total || 0)}</td></tr>`;
+    }).join('');
+
+    const grandTotals = {};
+    let grandTotal = 0;
+    empresas.forEach(e => grandTotals[e] = 0);
+    months.forEach(m => {
+      const row = byMonth[m] || { __total: 0 };
+      empresas.forEach(e => grandTotals[e] += (row[e] || 0));
+      grandTotal += row.__total || 0;
+    });
+    rowsHtml += `<tr style="background:#f0f2f5;font-weight:700"><td>Total Geral</td>` +
+      empresas.map(e => `<td class="num">${fmtBRL(grandTotals[e])}</td>`).join('') +
+      `<td class="num">${fmtBRL(grandTotal)}</td></tr>`;
+
+    body.innerHTML = rowsHtml;
+  }
+
+  function renderResumo() {
+    const empresas = knownEmpresas();
+    const byMonthDesp = computeByMonth(data, r => r.dataVencimento);
+    const byMonthRec = computeByMonth(recebimentos, r => r.data);
+    const months = [...new Set([...Object.keys(byMonthDesp), ...Object.keys(byMonthRec)])].sort().reverse();
+
+    renderMonthTable(byMonthDesp, empresas, months, 'resumoHead', 'resumoBody');
+    renderMonthTable(byMonthRec, empresas, months, 'resumoRecHead', 'resumoRecBody');
+
+    const saldo = {};
+    months.forEach(m => {
+      saldo[m] = { __total: 0 };
+      empresas.forEach(e => {
+        const rec = (byMonthRec[m] && byMonthRec[m][e]) || 0;
+        const desp = (byMonthDesp[m] && byMonthDesp[m][e]) || 0;
+        saldo[m][e] = rec - desp;
+        saldo[m].__total += (rec - desp);
+      });
+    });
+    renderMonthTable(saldo, empresas, months, 'resumoSaldoHead', 'resumoSaldoBody');
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const view = btn.dataset.view;
+      document.getElementById('viewDespesas').style.display = view === 'despesas' ? '' : 'none';
+      document.getElementById('viewRecebimentos').style.display = view === 'recebimentos' ? '' : 'none';
+      document.getElementById('viewResumo').style.display = view === 'resumo' ? '' : 'none';
+      if (view === 'recebimentos') renderRecebimentos();
+      if (view === 'resumo') renderResumo();
+    });
+  });
+
+  // ---------- Importação de CSV / PDF ----------
+
+  function todayBR() {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  }
+
+  function parseValor(str) {
+    let s = String(str).trim();
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    return parseFloat(s);
+  }
+
+  function parseCSV(text) {
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim() !== '');
+    if (lines.length < 2) throw new Error('CSV vazio ou sem linhas de dados.');
+    const headers = lines[0].split(';').map(h => h.trim());
+    const required = ['Empresa', 'Fornecedor', 'CNPJ', 'Descricao', 'DataVencimento', 'Situacao', 'Valor'];
+    for (const req of required) {
+      if (!headers.includes(req)) throw new Error(`Coluna obrigatória ausente no CSV: ${req}`);
+    }
+    return lines.slice(1).map((line, i) => {
+      const cols = line.split(';');
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = (cols[idx] || '').trim());
+      const valor = parseValor(obj.Valor);
+      if (!obj.Empresa || !obj.Fornecedor || isNaN(valor)) {
+        throw new Error(`Linha ${i + 2} do CSV inválida (verifique Empresa, Fornecedor e Valor).`);
+      }
+      return {
+        empresa: obj.Empresa.toUpperCase(),
+        fornecedor: obj.Fornecedor,
+        cnpj: obj.CNPJ || '',
+        descricao: obj.Descricao || '',
+        dataVencimento: obj.DataVencimento || todayBR(),
+        situacao: obj.Situacao || 'Em aberto',
+        valor: valor,
+        dataImportacao: obj.DataImportacao || todayBR(),
+        arquivoOrigem: obj.ArquivoOrigem || ''
+      };
+    });
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById('fileStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+
+  function downloadTemplate() {
+    const csv = 'Empresa;Fornecedor;CNPJ;Descricao;DataVencimento;Situacao;Valor;DataImportacao;ArquivoOrigem\n'
+      + 'GODINES;Exemplo Fornecedor Ltda;00.000.000/0001-00;Compra de nº 0000;02/07/2026;Em aberto;123.45;;exemplo.pdf\n';
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'modelo_importacao_despesas.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function empresaFromFilename(name) {
+    const base = name.replace(/\.[^.]+$/, '');
+    const match = base.match(/^[A-Za-zÀ-ÿ]+/);
+    return (match ? match[0] : base).toUpperCase();
+  }
+
+  function linesFromTextContent(textContent) {
+    const items = textContent.items
+      .filter(it => it.str.trim() !== '')
+      .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] }));
+    items.sort((a, b) => (b.y - a.y) || (a.x - b.x));
+    const lines = [];
+    let current = [];
+    let lastY = null;
+    const TOL = 3;
+    for (const it of items) {
+      if (lastY === null || Math.abs(it.y - lastY) <= TOL) {
+        current.push(it);
+      } else {
+        lines.push(current);
+        current = [it];
+      }
+      lastY = it.y;
+    }
+    if (current.length) lines.push(current);
+    return lines.map(line => line.sort((a, b) => a.x - b.x).map(it => it.str).join(' ').replace(/\s+/g, ' ').trim());
+  }
+
+  function parseRelatorioLine(line) {
+    const dateMatch = line.match(/\d{2}\/\d{2}\/\d{4}/);
+    if (!dateMatch) return null;
+    const dataVencimento = dateMatch[0];
+    const afterDate = line.slice(dateMatch.index + dataVencimento.length);
+    const currencyRe = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
+    const currencyMatches = [...afterDate.matchAll(currencyRe)];
+    if (currencyMatches.length === 0) return null;
+
+    const valor = parseValor(currencyMatches[0][0]);
+    if (isNaN(valor)) return null;
+    const situacao = afterDate.slice(0, currencyMatches[0].index).trim() || 'Em aberto';
+
+    const beforeDate = line.slice(0, dateMatch.index).trim();
+    const cnpjMatch = beforeDate.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+    let fornecedor, descricao, cnpj;
+    if (cnpjMatch) {
+      fornecedor = beforeDate.slice(0, cnpjMatch.index).trim();
+      descricao = beforeDate.slice(cnpjMatch.index + cnpjMatch[0].length).trim();
+      cnpj = cnpjMatch[0];
+    } else {
+      fornecedor = beforeDate;
+      descricao = '';
+      cnpj = '';
+    }
+    if (!fornecedor) return null;
+
+    return { fornecedor, cnpj, descricao, dataVencimento, situacao, valor };
+  }
+
+  async function extractRowsFromPdf(file) {
+    if (!window.pdfjsLib) throw new Error('Biblioteca de leitura de PDF não carregada (verifique a pasta "vendor").');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+    const buf = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    const rows = [];
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const textContent = await page.getTextContent();
+      for (const line of linesFromTextContent(textContent)) {
+        const parsed = parseRelatorioLine(line);
+        if (parsed) rows.push(parsed);
+      }
+    }
+    if (rows.length === 0) throw new Error('Nenhuma despesa reconhecida neste PDF. Confira se é um "Relatório de contas a pagar".');
+    const empresa = empresaFromFilename(file.name);
+    const hoje = todayBR();
+    return rows.map(r => ({
+      empresa,
+      fornecedor: r.fornecedor,
+      cnpj: r.cnpj,
+      descricao: r.descricao,
+      dataVencimento: r.dataVencimento,
+      situacao: r.situacao,
+      valor: r.valor,
+      dataImportacao: hoje,
+      arquivoOrigem: file.name
+    }));
+  }
+
+  async function handleImportFile(file) {
+    try {
+      const isPdf = /\.pdf$/i.test(file.name);
+      let newRows;
+      if (isPdf) {
+        setStatus('Lendo PDF...');
+        newRows = await extractRowsFromPdf(file);
+      } else {
+        const text = await file.text();
+        newRows = parseCSV(text);
+        newRows.forEach(r => { if (!r.arquivoOrigem) r.arquivoOrigem = file.name; });
+      }
+      setStatus(`Importando ${newRows.length} despesa(s)...`);
+      const inserts = newRows.map(toDbDespesaInsert);
+      const { data: inserted, error } = await sb.from('despesas').insert(inserts).select();
+      if (error) throw error;
+      inserted.forEach(row => upsertLocalDespesa(fromDbDespesa(row)));
+      populateFilter();
+      render();
+      updateLastUpdate();
+      setStatus(`${inserted.length} despesa(s) importada(s) com sucesso.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Erro ao importar: ' + err.message, 'error');
+    }
+  }
+
+  async function handleDelete(id) {
+    const row = data.find(r => r.id === id);
+    if (!row) return;
+    const ok = confirm(`Excluir esta despesa?\n\n${row.empresa} — ${row.fornecedor}\n${row.descricao}\n${fmtBRL(row.valor)}`);
+    if (!ok) return;
+    setStatus('Excluindo despesa...');
+    const { error } = await sb.from('despesas').delete().eq('id', id);
+    if (error) { setStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    removeLocalDespesa(id);
+    populateFilter();
+    render();
+    updateLastUpdate();
+    setStatus('Despesa excluída com sucesso.', 'ok');
+  }
+
+  document.getElementById('tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete');
+    if (!btn) return;
+    handleDelete(btn.dataset.id);
+  });
+
+  document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileInput').click());
+  document.getElementById('fileInput').addEventListener('change', (e) => {
+    if (e.target.files[0]) handleImportFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('btnTemplate').addEventListener('click', downloadTemplate);
+</script>
+
+</body>
+</html>
