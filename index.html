@@ -225,8 +225,9 @@
 </header>
 
 <div class="tabs">
-  <button class="tab-btn active" id="tabDespesas" data-view="despesas">📋 Despesas</button>
+  <button class="tab-btn active" id="tabDespesas" data-view="despesas">📋 Pagamentos</button>
   <button class="tab-btn" id="tabRecebimentos" data-view="recebimentos">💰 Recebimentos</button>
+  <button class="tab-btn" id="tabContas" data-view="contas">🏦 Contas Bancárias</button>
   <button class="tab-btn" id="tabResumo" data-view="resumo">📊 Resumo Mensal</button>
 </div>
 
@@ -317,6 +318,68 @@
 
 </div>
 
+<div id="viewContas" class="view" style="display:none">
+
+  <h2 style="margin:8px 0 14px;font-size:18px;">Contas cadastradas</h2>
+  <div class="toolbar">
+    <input type="text" id="ctEmpresa" placeholder="Empresa" list="empresaList" style="width:150px;min-width:150px">
+    <input type="text" id="ctBanco" placeholder="Banco" style="width:170px;min-width:170px">
+    <input type="text" id="ctLimite" placeholder="Limite (ex: 5000,00)" style="width:170px;min-width:170px">
+    <button class="btn btn-primary" id="btnAddConta">➕ Adicionar conta</button>
+  </div>
+  <div class="hint" id="ctStatus">Cadastre cada conta bancária (uma empresa pode ter mais de uma conta/banco).</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Banco</th>
+        <th class="num">Limite</th>
+        <th class="actions-col">Ações</th>
+      </tr>
+    </thead>
+    <tbody id="ctTbody"></tbody>
+  </table>
+
+  <h2 style="margin:32px 0 14px;font-size:18px;">Saldos diários</h2>
+  <div class="toolbar">
+    <select id="sdConta" style="min-width:240px"></select>
+    <input type="date" id="sdData" title="Data do saldo">
+    <input type="text" id="sdSaldo" placeholder="Saldo (ex: 1234,56)" style="width:150px;min-width:150px">
+    <button class="btn btn-primary" id="btnAddSaldo">➕ Lançar saldo</button>
+  </div>
+  <div class="hint" id="sdStatus">Lance o saldo do dia de cada conta. Os totais abaixo somam o que estiver filtrado.</div>
+
+  <div class="toolbar">
+    <select id="sdFiltroEmpresa"></select>
+    <select id="sdFiltroBanco"></select>
+    <input type="date" id="sdFiltroDia" title="Filtrar por dia">
+    <button class="btn" id="btnClearSaldoFiltros">Limpar filtros</button>
+    <span class="count" id="sdCount"></span>
+  </div>
+
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Totais por Empresa</div>
+  <div class="cards" id="cardsSaldoEmpresa"></div>
+
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Totais por Banco</div>
+  <div class="cards" id="cardsSaldoBanco"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Empresa</th>
+        <th>Banco</th>
+        <th class="num">Saldo</th>
+        <th class="num">Limite</th>
+        <th class="actions-col">Ações</th>
+      </tr>
+    </thead>
+    <tbody id="sdTbody"></tbody>
+  </table>
+
+</div>
+
 <div id="viewResumo" class="view" style="display:none">
   <h2 style="margin:8px 0 14px;font-size:18px;">Despesas por Mês (por vencimento)</h2>
   <table>
@@ -349,6 +412,8 @@
 
   let data = [];
   let recebimentos = [];
+  let contas = [];
+  let saldos = [];
   const fmtBRL = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const selectedIds = new Set();
@@ -439,6 +504,36 @@
     if (idx !== -1) recebimentos.splice(idx, 1);
   }
 
+  function fromDbConta(row) {
+    return { id: row.id, empresa: row.empresa, banco: row.banco, limite: Number(row.limite || 0) };
+  }
+  function toDbContaInsert(r) {
+    return { empresa: r.empresa, banco: r.banco, limite: r.limite || 0 };
+  }
+  function fromDbSaldo(row) {
+    return { id: row.id, contaId: row.conta_id, data: isoToBR(row.data), saldo: Number(row.saldo) };
+  }
+  function toDbSaldoInsert(r) {
+    return { conta_id: r.contaId, data: brToISO(r.data), saldo: r.saldo };
+  }
+  function upsertLocalConta(row) {
+    const idx = contas.findIndex(r => r.id === row.id);
+    if (idx === -1) contas.push(row); else contas[idx] = row;
+  }
+  function removeLocalConta(id) {
+    const idx = contas.findIndex(r => r.id === id);
+    if (idx !== -1) contas.splice(idx, 1);
+    saldos = saldos.filter(s => s.contaId !== id);
+  }
+  function upsertLocalSaldo(row) {
+    const idx = saldos.findIndex(r => r.id === row.id);
+    if (idx === -1) saldos.push(row); else saldos[idx] = row;
+  }
+  function removeLocalSaldo(id) {
+    const idx = saldos.findIndex(r => r.id === id);
+    if (idx !== -1) saldos.splice(idx, 1);
+  }
+
   // ---------- Autenticação ----------
 
   function showApp() {
@@ -495,6 +590,19 @@
     populateFilter();
     render();
     updateLastUpdate();
+
+    // Contas Bancárias é opcional: se o SQL dessa parte ainda não rodou, não trava o resto do painel.
+    const [{ data: ctRows, error: e3 }, { data: sdRows, error: e4 }] = await Promise.all([
+      sb.from('contas_bancarias').select('*').order('empresa', { ascending: true }),
+      sb.from('saldos_diarios').select('*').order('data', { ascending: false })
+    ]);
+    if (e3 || e4) {
+      console.warn('Contas Bancárias indisponível (rode schema_contas_bancarias.sql no Supabase):', e3 || e4);
+      return;
+    }
+    contas = ctRows.map(fromDbConta);
+    saldos = sdRows.map(fromDbSaldo);
+    if (document.getElementById('viewContas').style.display !== 'none') { renderContas(); renderSaldos(); }
   }
 
   function subscribeRealtime() {
@@ -517,6 +625,28 @@
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'recebimentos' }, (payload) => {
         removeLocalRecebimento(payload.old.id);
         if (document.getElementById('viewRecebimentos').style.display !== 'none') renderRecebimentos();
+      })
+      .subscribe();
+
+    sb.channel('contas-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'contas_bancarias' }, (payload) => {
+        upsertLocalConta(fromDbConta(payload.new));
+        if (document.getElementById('viewContas').style.display !== 'none') { renderContas(); renderSaldos(); }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'contas_bancarias' }, (payload) => {
+        removeLocalConta(payload.old.id);
+        if (document.getElementById('viewContas').style.display !== 'none') { renderContas(); renderSaldos(); }
+      })
+      .subscribe();
+
+    sb.channel('saldos-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'saldos_diarios' }, (payload) => {
+        upsertLocalSaldo(fromDbSaldo(payload.new));
+        if (document.getElementById('viewContas').style.display !== 'none') renderSaldos();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'saldos_diarios' }, (payload) => {
+        removeLocalSaldo(payload.old.id);
+        if (document.getElementById('viewContas').style.display !== 'none') renderSaldos();
       })
       .subscribe();
   }
@@ -704,7 +834,7 @@
   }
 
   function knownEmpresas() {
-    return [...new Set([...data.map(r => r.empresa), ...recebimentos.map(r => r.empresa)])].sort();
+    return [...new Set([...data.map(r => r.empresa), ...recebimentos.map(r => r.empresa), ...contas.map(r => r.empresa)])].sort();
   }
 
   function populateEmpresaDatalist() {
@@ -788,6 +918,225 @@
     handleDeleteRecebimento(btn.dataset.id);
   });
 
+  // ---------- Aba Contas Bancárias ----------
+
+  function setCtStatus(msg, type) {
+    const el = document.getElementById('ctStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+  function setSdStatus(msg, type) {
+    const el = document.getElementById('sdStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+
+  function contaLabel(conta) {
+    return `${conta.empresa} — ${conta.banco}`;
+  }
+
+  function populateContaSelect() {
+    const sel = document.getElementById('sdConta');
+    const prev = sel.value;
+    const sorted = [...contas].sort((a, b) => a.empresa.localeCompare(b.empresa) || a.banco.localeCompare(b.banco));
+    sel.innerHTML = sorted.length === 0
+      ? '<option value="">Cadastre uma conta primeiro</option>'
+      : sorted.map(c => `<option value="${c.id}">${contaLabel(c)}</option>`).join('');
+    if (sorted.some(c => c.id === prev)) sel.value = prev;
+  }
+
+  function populateSaldoFilters() {
+    const empSel = document.getElementById('sdFiltroEmpresa');
+    const prevEmp = empSel.value;
+    const empresas = [...new Set(contas.map(c => c.empresa))].sort();
+    empSel.innerHTML = '<option value="">Todas as empresas</option>' + empresas.map(e => `<option value="${e}">${e}</option>`).join('');
+    if (empresas.includes(prevEmp)) empSel.value = prevEmp;
+
+    const bancoSel = document.getElementById('sdFiltroBanco');
+    const prevBanco = bancoSel.value;
+    const bancos = [...new Set(contas.map(c => c.banco))].sort();
+    bancoSel.innerHTML = '<option value="">Todos os bancos</option>' + bancos.map(b => `<option value="${b}">${b}</option>`).join('');
+    if (bancos.includes(prevBanco)) bancoSel.value = prevBanco;
+  }
+
+  function renderContas() {
+    populateEmpresaDatalist();
+    populateContaSelect();
+    populateSaldoFilters();
+
+    const rows = [...contas].sort((a, b) => a.empresa.localeCompare(b.empresa) || a.banco.localeCompare(b.banco));
+    const tbody = document.getElementById('ctTbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-msg">Nenhuma conta cadastrada.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(c => `
+        <tr>
+          <td><span class="badge">${c.empresa}</span></td>
+          <td>${c.banco}</td>
+          <td class="num">${fmtBRL(c.limite)}</td>
+          <td class="actions-col"><button class="btn-icon btn-delete-conta" data-id="${c.id}" title="Excluir conta">🗑️</button></td>
+        </tr>`).join('');
+    }
+  }
+
+  async function handleAddConta() {
+    const empresaEl = document.getElementById('ctEmpresa');
+    const bancoEl = document.getElementById('ctBanco');
+    const limiteEl = document.getElementById('ctLimite');
+
+    const empresa = empresaEl.value.trim().toUpperCase();
+    const banco = bancoEl.value.trim();
+    const limiteStr = limiteEl.value.trim();
+    const limite = limiteStr ? parseValor(limiteStr) : 0;
+
+    if (!empresa || !banco || isNaN(limite)) {
+      setCtStatus('Preencha empresa e banco (limite é opcional).', 'error');
+      return;
+    }
+
+    setCtStatus('Salvando...');
+    const { data: inserted, error } = await sb.from('contas_bancarias').insert([toDbContaInsert({ empresa, banco, limite })]).select();
+    if (error) { setCtStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    upsertLocalConta(fromDbConta(inserted[0]));
+    renderContas();
+    renderSaldos();
+    setCtStatus('Conta adicionada com sucesso.', 'ok');
+
+    empresaEl.value = '';
+    bancoEl.value = '';
+    limiteEl.value = '';
+  }
+
+  async function handleDeleteConta(id) {
+    const conta = contas.find(c => c.id === id);
+    if (!conta) return;
+    const qtdSaldos = saldos.filter(s => s.contaId === id).length;
+    const aviso = qtdSaldos > 0 ? `\n\nIsso também vai excluir ${qtdSaldos} saldo(s) lançado(s) para essa conta.` : '';
+    const ok = confirm(`Excluir a conta ${contaLabel(conta)}?${aviso}`);
+    if (!ok) return;
+    setCtStatus('Excluindo...');
+    const { error } = await sb.from('contas_bancarias').delete().eq('id', id);
+    if (error) { setCtStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    removeLocalConta(id);
+    renderContas();
+    renderSaldos();
+    setCtStatus('Conta excluída com sucesso.', 'ok');
+  }
+
+  document.getElementById('btnAddConta').addEventListener('click', handleAddConta);
+  document.getElementById('ctTbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-conta');
+    if (!btn) return;
+    handleDeleteConta(btn.dataset.id);
+  });
+
+  function getFilteredSaldos() {
+    const empresa = document.getElementById('sdFiltroEmpresa').value;
+    const banco = document.getElementById('sdFiltroBanco').value;
+    const dia = document.getElementById('sdFiltroDia').value;
+    return saldos
+      .map(s => {
+        const conta = contas.find(c => c.id === s.contaId);
+        return conta ? { ...s, empresa: conta.empresa, banco: conta.banco, limite: conta.limite } : null;
+      })
+      .filter(s => s !== null)
+      .filter(s => {
+        if (empresa && s.empresa !== empresa) return false;
+        if (banco && s.banco !== banco) return false;
+        if (dia && brToISO(s.data) !== dia) return false;
+        return true;
+      })
+      .sort((a, b) => brToISO(b.data).localeCompare(brToISO(a.data)));
+  }
+
+  function renderGroupedCards(containerId, rows, groupKey, totalLabel) {
+    const byGroup = {};
+    let total = 0;
+    rows.forEach(r => { byGroup[r[groupKey]] = (byGroup[r[groupKey]] || 0) + r.saldo; total += r.saldo; });
+    const el = document.getElementById(containerId);
+    el.innerHTML = Object.keys(byGroup).sort().map(k =>
+      `<div class="card"><div class="label">${k}</div><div class="value">${fmtBRL(byGroup[k])}</div></div>`
+    ).join('') + `<div class="card total"><div class="label">${totalLabel}</div><div class="value">${fmtBRL(total)}</div></div>`;
+  }
+
+  function renderSaldos() {
+    populateSaldoFilters();
+    const rows = getFilteredSaldos();
+
+    renderGroupedCards('cardsSaldoEmpresa', rows, 'empresa', 'Total Geral');
+    renderGroupedCards('cardsSaldoBanco', rows, 'banco', 'Total Geral');
+
+    const tbody = document.getElementById('sdTbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-msg">Nenhum saldo lançado.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.data}</td>
+          <td><span class="badge">${r.empresa}</span></td>
+          <td>${r.banco}</td>
+          <td class="num">${fmtBRL(r.saldo)}</td>
+          <td class="num">${fmtBRL(r.limite)}</td>
+          <td class="actions-col"><button class="btn-icon btn-delete-saldo" data-id="${r.id}" title="Excluir saldo">🗑️</button></td>
+        </tr>`).join('');
+    }
+    document.getElementById('sdCount').textContent = `${rows.length} de ${saldos.length} saldo(s)`;
+  }
+
+  async function handleAddSaldo() {
+    const contaEl = document.getElementById('sdConta');
+    const dataEl = document.getElementById('sdData');
+    const saldoEl = document.getElementById('sdSaldo');
+
+    const contaId = contaEl.value;
+    const saldo = parseValor(saldoEl.value);
+    const dataBR = isoToBR(dataEl.value || new Date().toISOString().slice(0, 10));
+
+    if (!contaId || isNaN(saldo)) {
+      setSdStatus('Escolha a conta e informe um saldo válido.', 'error');
+      return;
+    }
+
+    setSdStatus('Salvando...');
+    const { data: inserted, error } = await sb.from('saldos_diarios').insert([toDbSaldoInsert({ contaId, data: dataBR, saldo })]).select();
+    if (error) { setSdStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    upsertLocalSaldo(fromDbSaldo(inserted[0]));
+    renderSaldos();
+    setSdStatus('Saldo lançado com sucesso.', 'ok');
+
+    saldoEl.value = '';
+  }
+
+  async function handleDeleteSaldo(id) {
+    const row = saldos.find(s => s.id === id);
+    if (!row) return;
+    const conta = contas.find(c => c.id === row.contaId);
+    const ok = confirm(`Excluir este saldo?\n\n${conta ? contaLabel(conta) : ''} — ${row.data}\n${fmtBRL(row.saldo)}`);
+    if (!ok) return;
+    setSdStatus('Excluindo...');
+    const { error } = await sb.from('saldos_diarios').delete().eq('id', id);
+    if (error) { setSdStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    removeLocalSaldo(id);
+    renderSaldos();
+    setSdStatus('Saldo excluído com sucesso.', 'ok');
+  }
+
+  document.getElementById('btnAddSaldo').addEventListener('click', handleAddSaldo);
+  document.getElementById('sdTbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-saldo');
+    if (!btn) return;
+    handleDeleteSaldo(btn.dataset.id);
+  });
+  document.getElementById('sdFiltroEmpresa').addEventListener('change', renderSaldos);
+  document.getElementById('sdFiltroBanco').addEventListener('change', renderSaldos);
+  document.getElementById('sdFiltroDia').addEventListener('change', renderSaldos);
+  document.getElementById('btnClearSaldoFiltros').addEventListener('click', () => {
+    document.getElementById('sdFiltroEmpresa').value = '';
+    document.getElementById('sdFiltroBanco').value = '';
+    document.getElementById('sdFiltroDia').value = '';
+    renderSaldos();
+  });
+
   // ---------- Abas (Despesas / Recebimentos / Resumo Mensal) ----------
 
   function computeByMonth(list, dateOf) {
@@ -862,8 +1211,10 @@
       const view = btn.dataset.view;
       document.getElementById('viewDespesas').style.display = view === 'despesas' ? '' : 'none';
       document.getElementById('viewRecebimentos').style.display = view === 'recebimentos' ? '' : 'none';
+      document.getElementById('viewContas').style.display = view === 'contas' ? '' : 'none';
       document.getElementById('viewResumo').style.display = view === 'resumo' ? '' : 'none';
       if (view === 'recebimentos') renderRecebimentos();
+      if (view === 'contas') { renderContas(); renderSaldos(); }
       if (view === 'resumo') renderResumo();
     });
   });
