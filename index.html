@@ -593,7 +593,8 @@
       data: isoToBR(row.data),
       valor: Number(row.valor),
       descricao: row.descricao || '',
-      dataLancamento: isoToBR(row.data_lancamento)
+      dataLancamento: isoToBR(row.data_lancamento),
+      vendaId: row.venda_id || null
     };
   }
 
@@ -1108,9 +1109,11 @@
         <tr>
           <td><span class="badge">${r.empresa}</span></td>
           <td>${r.data}</td>
-          <td>${r.descricao || ''}</td>
+          <td>${r.descricao || ''}${r.vendaId ? ' <span class="badge" style="background:#fef3c7;color:#92400e;">🍽️ da Venda Diária</span>' : ''}</td>
           <td class="num">${fmtBRL(r.valor)}</td>
-          <td class="actions-col"><button class="btn-icon btn-delete-rec" data-id="${r.id}" title="Excluir recebimento">🗑️</button></td>
+          <td class="actions-col">${r.vendaId
+            ? `<span title="Excluído junto com a venda na aba Venda Diária" style="color:var(--muted);font-size:11px;">🔒</span>`
+            : `<button class="btn-icon btn-delete-rec" data-id="${r.id}" title="Excluir recebimento">🗑️</button>`}</td>
         </tr>`).join('');
     }
     document.getElementById('recFootTotal').textContent = fmtBRL(total);
@@ -1564,7 +1567,22 @@
     if (error) { setVdStatus('Erro ao salvar: ' + error.message, 'error'); return; }
     upsertLocalVenda(fromDbVenda(inserted[0]));
     renderVendaView(currentVendaEmpresa);
-    setVdStatus('Venda lançada com sucesso.', 'ok');
+
+    const { data: recInserted, error: recError } = await sb.from('recebimentos').insert([{
+      empresa: currentVendaEmpresa,
+      data: brToISO(nova.data),
+      valor: totalVendas,
+      descricao: 'Venda diária',
+      data_lancamento: brToISO(todayBR()),
+      venda_id: inserted[0].id
+    }]).select();
+    if (recError) {
+      console.warn('Não foi possível espelhar em Recebimentos (rode schema_link_vendas_recebimentos.sql):', recError);
+      setVdStatus('Venda lançada, mas não entrou em Recebimentos ainda (rode schema_link_vendas_recebimentos.sql no Supabase).', 'error');
+    } else {
+      upsertLocalRecebimento(fromDbRecebimento(recInserted[0]));
+      setVdStatus('Venda lançada com sucesso (já refletida em Recebimentos).', 'ok');
+    }
 
     ['vdCredito', 'vdDebito', 'vdRefeicao', 'vdDinheiro', 'vdPix', 'vdFiado', 'vdIfood',
      'vdCaixaInicial', 'vdRetirada', 'vdCaixa', 'vdPessoas', 'vdFichas'].forEach(id => document.getElementById(id).value = '');
