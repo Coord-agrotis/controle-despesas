@@ -355,6 +355,30 @@
   </div>
   <div class="hint" id="sdStatus">Lance o saldo do dia de cada conta. Os totais abaixo somam o que estiver filtrado.</div>
 
+  <h2 style="margin:28px 0 4px;font-size:16px;">Posição Atual</h2>
+  <div class="hint" style="margin-top:0">Último saldo lançado de cada conta, somado ao limite (quanto está realmente disponível agora).</div>
+
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Por Empresa</div>
+  <div class="cards" id="cardsPosicaoEmpresa"></div>
+
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Por Banco</div>
+  <div class="cards" id="cardsPosicaoBanco"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Banco</th>
+        <th>Último saldo em</th>
+        <th class="num">Saldo</th>
+        <th class="num">Limite</th>
+        <th class="num">Disponível</th>
+      </tr>
+    </thead>
+    <tbody id="posicaoTbody"></tbody>
+  </table>
+
+  <h2 style="margin:32px 0 14px;font-size:18px;">Histórico de lançamentos</h2>
   <div class="toolbar">
     <select id="sdFiltroEmpresa"></select>
     <select id="sdFiltroBanco"></select>
@@ -363,10 +387,10 @@
     <span class="count" id="sdCount"></span>
   </div>
 
-  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Totais por Empresa</div>
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Soma dos lançamentos filtrados — por Empresa</div>
   <div class="cards" id="cardsSaldoEmpresa"></div>
 
-  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Totais por Banco</div>
+  <div class="hint" style="margin:16px 0 6px;font-weight:600;color:var(--text)">Soma dos lançamentos filtrados — por Banco</div>
   <div class="cards" id="cardsSaldoBanco"></div>
 
   <table>
@@ -1064,7 +1088,89 @@
     ).join('') + `<div class="card total"><div class="label">${totalLabel}</div><div class="value">${fmtBRL(total)}</div></div>`;
   }
 
+  // ---------- Posição Atual: último saldo lançado por conta + limite ----------
+
+  function getPosicaoAtual() {
+    const latestByConta = {};
+    saldos.forEach(s => {
+      const cur = latestByConta[s.contaId];
+      if (!cur || brToISO(s.data) > brToISO(cur.data)) latestByConta[s.contaId] = s;
+    });
+    return contas
+      .map(c => {
+        const latest = latestByConta[c.id];
+        return {
+          empresa: c.empresa,
+          banco: c.banco,
+          limite: c.limite,
+          saldo: latest ? latest.saldo : null,
+          data: latest ? latest.data : null
+        };
+      })
+      .sort((a, b) => a.empresa.localeCompare(b.empresa) || a.banco.localeCompare(b.banco));
+  }
+
+  function renderPosicaoCards(containerId, rows, groupKey) {
+    const byGroup = {};
+    rows.forEach(r => {
+      if (r.saldo === null) return;
+      if (!byGroup[r[groupKey]]) byGroup[r[groupKey]] = { saldo: 0, limite: 0 };
+      byGroup[r[groupKey]].saldo += r.saldo;
+      byGroup[r[groupKey]].limite += r.limite;
+    });
+    const keys = Object.keys(byGroup).sort();
+    const cardHtml = (label, g, isTotal) => `
+      <div class="card${isTotal ? ' total' : ''}">
+        <div class="label">${label}</div>
+        <div class="value" style="font-size:15px">${fmtBRL(g.saldo)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Limite: ${fmtBRL(g.limite)}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:2px">Disponível: ${fmtBRL(g.saldo + g.limite)}</div>
+      </div>`;
+    const totals = { saldo: 0, limite: 0 };
+    keys.forEach(k => { totals.saldo += byGroup[k].saldo; totals.limite += byGroup[k].limite; });
+    document.getElementById(containerId).innerHTML =
+      keys.map(k => cardHtml(k, byGroup[k], false)).join('') + cardHtml('Total Geral', totals, true);
+  }
+
+  function renderPosicaoTable(rows) {
+    const tbody = document.getElementById('posicaoTbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-msg">Nenhuma conta cadastrada ainda.</td></tr>`;
+      return;
+    }
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    tbody.innerHTML = rows.map(r => {
+      if (r.saldo === null) {
+        return `<tr>
+          <td><span class="badge">${r.empresa}</span></td>
+          <td>${r.banco}</td>
+          <td colspan="4" style="color:var(--muted)">Sem lançamento ainda</td>
+        </tr>`;
+      }
+      const disponivel = r.saldo + r.limite;
+      const dataObj = new Date(brToISO(r.data));
+      const diasAtras = Math.round((hoje - dataObj) / 86400000);
+      const alerta = diasAtras >= 2 ? ` <span style="color:var(--danger);font-size:11px">(${diasAtras} dias sem atualizar)</span>` : '';
+      return `<tr>
+        <td><span class="badge">${r.empresa}</span></td>
+        <td>${r.banco}</td>
+        <td>${r.data}${alerta}</td>
+        <td class="num">${fmtBRL(r.saldo)}</td>
+        <td class="num">${fmtBRL(r.limite)}</td>
+        <td class="num" style="font-weight:700">${fmtBRL(disponivel)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderPosicaoAtual() {
+    const rows = getPosicaoAtual();
+    renderPosicaoCards('cardsPosicaoEmpresa', rows, 'empresa');
+    renderPosicaoCards('cardsPosicaoBanco', rows, 'banco');
+    renderPosicaoTable(rows);
+  }
+
   function renderSaldos() {
+    renderPosicaoAtual();
     populateSaldoFilters();
     const rows = getFilteredSaldos();
 
