@@ -233,7 +233,11 @@
   <button class="tab-btn active" id="tabDespesas" data-view="despesas">📋 Pagamentos</button>
   <button class="tab-btn" id="tabRecebimentos" data-view="recebimentos">💰 Recebimentos</button>
   <button class="tab-btn" id="tabContas" data-view="contas">🏦 Contas Bancárias</button>
+  <button class="tab-btn" data-view="venda" data-empresa="CONFI">🍽️ Venda CONFI</button>
+  <button class="tab-btn" data-view="venda" data-empresa="FLH">🍽️ Venda FLH</button>
+  <button class="tab-btn" data-view="venda" data-empresa="GODINES">🍽️ Venda GODINES</button>
   <button class="tab-btn" id="tabResumo" data-view="resumo">📊 Resumo Mensal</button>
+  <button class="tab-btn" id="tabPermissoes" data-view="permissoes">⚙️ Permissões</button>
 </div>
 
 <div id="viewDespesas" class="view">
@@ -433,6 +437,86 @@
   </table>
 </div>
 
+<div id="viewVenda" class="view" style="display:none">
+  <h2 id="vendaTitle" style="margin:8px 0 4px;font-size:18px;"></h2>
+  <div class="hint" style="margin-top:0">Total Vendas é calculado automaticamente somando os meios de pagamento.</div>
+
+  <div class="toolbar" style="flex-wrap:wrap;">
+    <input type="date" id="vdData" title="Data da venda">
+    <input type="text" id="vdCredito" placeholder="Total Crédito" style="width:130px;min-width:130px">
+    <input type="text" id="vdDebito" placeholder="Total Débito" style="width:130px;min-width:130px">
+    <input type="text" id="vdRefeicao" placeholder="Total Refeição" style="width:130px;min-width:130px">
+    <input type="text" id="vdDinheiro" placeholder="Total Dinheiro" style="width:130px;min-width:130px">
+    <input type="text" id="vdPix" placeholder="Total PIX" style="width:130px;min-width:130px">
+    <input type="text" id="vdFiado" placeholder="Fiado" style="width:110px;min-width:110px">
+    <input type="text" id="vdIfood" placeholder="Ifood" style="width:110px;min-width:110px">
+  </div>
+  <div class="toolbar" style="flex-wrap:wrap;">
+    <input type="text" id="vdCaixaInicial" placeholder="Caixa Inicial" style="width:130px;min-width:130px">
+    <input type="text" id="vdRetirada" placeholder="Retirada Caixa" style="width:130px;min-width:130px">
+    <input type="text" id="vdCaixa" placeholder="Caixa (contado)" style="width:130px;min-width:130px">
+    <input type="text" id="vdPessoas" placeholder="Total de Pessoas" style="width:130px;min-width:130px">
+    <input type="text" id="vdFichas" placeholder="Total de Fichas" style="width:130px;min-width:130px">
+    <button class="btn btn-primary" id="btnAddVenda">➕ Lançar venda do dia</button>
+  </div>
+  <div class="hint" id="vdStatus"></div>
+  <div class="hint" id="vdTotalPreview" style="font-weight:700;color:var(--accent)"></div>
+
+  <div class="cards" id="cardsVenda"></div>
+
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th class="num">Crédito</th>
+          <th class="num">Débito</th>
+          <th class="num">Refeição</th>
+          <th class="num">Dinheiro</th>
+          <th class="num">PIX</th>
+          <th class="num">Fiado</th>
+          <th class="num">Ifood</th>
+          <th class="num">Caixa Inicial</th>
+          <th class="num">Retirada</th>
+          <th class="num">Caixa</th>
+          <th class="num">Total Vendas</th>
+          <th class="num">Pessoas</th>
+          <th class="num">Fichas</th>
+          <th class="actions-col">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="vdTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="viewPermissoes" class="view" style="display:none">
+  <h2 style="margin:8px 0 14px;font-size:18px;">Controle de Acesso</h2>
+  <div class="hint" style="margin-top:0">Pessoas sem cadastro aqui têm acesso completo ao painel. Restrinja um e-mail a uma empresa para que essa pessoa veja apenas a aba de Venda Diária daquela empresa — nada mais.</div>
+
+  <div class="toolbar">
+    <input type="email" id="permEmail" placeholder="E-mail da pessoa" style="min-width:240px">
+    <select id="permEmpresa">
+      <option value="CONFI">CONFI</option>
+      <option value="FLH">FLH</option>
+      <option value="GODINES">GODINES</option>
+    </select>
+    <button class="btn btn-primary" id="btnAddPerm">➕ Restringir acesso</button>
+  </div>
+  <div class="hint" id="permStatus">A pessoa precisa já ter uma conta criada no Supabase (Authentication → Users → Invite user) com esse mesmo e-mail. A mudança vale a partir do próximo login dela.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>E-mail</th>
+        <th>Empresa liberada</th>
+        <th class="actions-col">Ações</th>
+      </tr>
+    </thead>
+    <tbody id="permTbody"></tbody>
+  </table>
+</div>
+
 </div>
 
 <script src="vendor/pdf.min.js"></script>
@@ -447,6 +531,10 @@
   let recebimentos = [];
   let contas = [];
   let saldos = [];
+  let vendas = [];
+  let perfis = [];
+  let myEmpresaLiberada = null; // null = acesso completo; senão, string tipo 'GODINES'
+  let currentVendaEmpresa = null;
   const fmtBRL = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const selectedIds = new Set();
@@ -567,6 +655,58 @@
     if (idx !== -1) saldos.splice(idx, 1);
   }
 
+  function fromDbVenda(row) {
+    return {
+      id: row.id,
+      empresa: row.empresa,
+      data: isoToBR(row.data),
+      credito: Number(row.total_credito || 0),
+      debito: Number(row.total_debito || 0),
+      refeicao: Number(row.total_refeicao || 0),
+      dinheiro: Number(row.total_dinheiro || 0),
+      pix: Number(row.total_pix || 0),
+      fiado: Number(row.fiado || 0),
+      ifood: Number(row.ifood || 0),
+      caixaInicial: Number(row.caixa_inicial || 0),
+      retirada: Number(row.retirada_caixa || 0),
+      caixa: Number(row.caixa || 0),
+      totalVendas: Number(row.total_vendas || 0),
+      pessoas: Number(row.total_pessoas || 0),
+      fichas: Number(row.total_fichas || 0)
+    };
+  }
+  function toDbVendaInsert(r) {
+    return {
+      empresa: r.empresa,
+      data: brToISO(r.data),
+      total_credito: r.credito || 0,
+      total_debito: r.debito || 0,
+      total_refeicao: r.refeicao || 0,
+      total_dinheiro: r.dinheiro || 0,
+      total_pix: r.pix || 0,
+      fiado: r.fiado || 0,
+      ifood: r.ifood || 0,
+      caixa_inicial: r.caixaInicial || 0,
+      retirada_caixa: r.retirada || 0,
+      caixa: r.caixa || 0,
+      total_vendas: r.totalVendas || 0,
+      total_pessoas: r.pessoas || 0,
+      total_fichas: r.fichas || 0
+    };
+  }
+  function upsertLocalVenda(row) {
+    const idx = vendas.findIndex(r => r.id === row.id);
+    if (idx === -1) vendas.push(row); else vendas[idx] = row;
+  }
+  function removeLocalVenda(id) {
+    const idx = vendas.findIndex(r => r.id === id);
+    if (idx !== -1) vendas.splice(idx, 1);
+  }
+
+  function fromDbPerfil(row) {
+    return { email: row.email, empresaLiberada: row.empresa_liberada };
+  }
+
   // ---------- Autenticação ----------
 
   function showApp() {
@@ -598,10 +738,12 @@
 
   let realtimeReady = false;
 
-  sb.auth.onAuthStateChange((event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     if (session) {
       showApp();
       document.getElementById('userEmail').textContent = session.user.email;
+      myEmpresaLiberada = await fetchMyPerfil(session.user.email);
+      applyAccessControl();
       loadData();
       if (!realtimeReady) { subscribeRealtime(); realtimeReady = true; }
     } else {
@@ -609,7 +751,47 @@
     }
   });
 
+  async function fetchMyPerfil(email) {
+    const { data: row, error } = await sb.from('perfis').select('empresa_liberada').eq('email', email).maybeSingle();
+    if (error) {
+      // Tabela "perfis" ainda não existe (schema_permissoes_vendas.sql não rodou) -> trata como acesso completo.
+      console.warn('Perfis indisponível (rode schema_permissoes_vendas.sql no Supabase):', error);
+      return null;
+    }
+    return row ? row.empresa_liberada : null;
+  }
+
+  function applyAccessControl() {
+    const restrito = !!myEmpresaLiberada;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      const view = btn.dataset.view;
+      const isMinhaVenda = view === 'venda' && btn.dataset.empresa === myEmpresaLiberada;
+      const visivel = restrito ? isMinhaVenda : true;
+      btn.style.display = visivel ? '' : 'none';
+    });
+    document.querySelector('.tabs').style.display = restrito ? 'none' : 'flex';
+
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+    if (restrito) {
+      currentVendaEmpresa = myEmpresaLiberada;
+      document.getElementById('viewVenda').style.display = '';
+    } else {
+      document.getElementById('tabDespesas').classList.add('active');
+      document.getElementById('viewDespesas').style.display = '';
+    }
+  }
+
   async function loadData() {
+    if (myEmpresaLiberada) {
+      // Usuário restrito: só busca a Venda Diária da própria empresa (RLS já bloqueia o resto).
+      const { data: vRows, error } = await sb.from('vendas_diarias').select('*').eq('empresa', myEmpresaLiberada).order('data', { ascending: false });
+      if (error) { console.warn('Venda Diária indisponível (rode schema_permissoes_vendas.sql):', error); return; }
+      vendas = vRows.map(fromDbVenda);
+      renderVendaView(myEmpresaLiberada);
+      return;
+    }
+
     const [{ data: despRows, error: e1 }, { data: recRows, error: e2 }] = await Promise.all([
       sb.from('despesas').select('*').order('data_vencimento', { ascending: false }),
       sb.from('recebimentos').select('*').order('data', { ascending: false })
@@ -624,18 +806,31 @@
     render();
     updateLastUpdate();
 
-    // Contas Bancárias é opcional: se o SQL dessa parte ainda não rodou, não trava o resto do painel.
+    // Contas Bancárias e Venda Diária são opcionais: se o SQL ainda não rodou, não trava o resto do painel.
     const [{ data: ctRows, error: e3 }, { data: sdRows, error: e4 }] = await Promise.all([
       sb.from('contas_bancarias').select('*').order('empresa', { ascending: true }),
       sb.from('saldos_diarios').select('*').order('data', { ascending: false })
     ]);
     if (e3 || e4) {
       console.warn('Contas Bancárias indisponível (rode schema_contas_bancarias.sql no Supabase):', e3 || e4);
+    } else {
+      contas = ctRows.map(fromDbConta);
+      saldos = sdRows.map(fromDbSaldo);
+      if (document.getElementById('viewContas').style.display !== 'none') { renderContas(); renderSaldos(); }
+    }
+
+    const [{ data: vdRows, error: e5 }, { data: pfRows, error: e6 }] = await Promise.all([
+      sb.from('vendas_diarias').select('*').order('data', { ascending: false }),
+      sb.from('perfis').select('*').order('email', { ascending: true })
+    ]);
+    if (e5 || e6) {
+      console.warn('Venda Diária / Permissões indisponível (rode schema_permissoes_vendas.sql no Supabase):', e5 || e6);
       return;
     }
-    contas = ctRows.map(fromDbConta);
-    saldos = sdRows.map(fromDbSaldo);
-    if (document.getElementById('viewContas').style.display !== 'none') { renderContas(); renderSaldos(); }
+    vendas = vdRows.map(fromDbVenda);
+    perfis = pfRows.map(fromDbPerfil);
+    if (document.getElementById('viewVenda').style.display !== 'none' && currentVendaEmpresa) renderVendaView(currentVendaEmpresa);
+    if (document.getElementById('viewPermissoes').style.display !== 'none') renderPermissoes();
   }
 
   function subscribeRealtime() {
@@ -682,6 +877,25 @@
         if (document.getElementById('viewContas').style.display !== 'none') renderSaldos();
       })
       .subscribe();
+
+    sb.channel('vendas-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendas_diarias' }, (payload) => {
+        upsertLocalVenda(fromDbVenda(payload.new));
+        if (document.getElementById('viewVenda').style.display !== 'none' && currentVendaEmpresa) renderVendaView(currentVendaEmpresa);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'vendas_diarias' }, (payload) => {
+        removeLocalVenda(payload.old.id);
+        if (document.getElementById('viewVenda').style.display !== 'none' && currentVendaEmpresa) renderVendaView(currentVendaEmpresa);
+      })
+      .subscribe();
+
+    if (!myEmpresaLiberada) {
+      sb.channel('perfis-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'perfis' }, () => {
+          loadData();
+        })
+        .subscribe();
+    }
   }
 
   // ---------- Despesas: filtros, tabela, cards ----------
@@ -1252,6 +1466,189 @@
     renderSaldos();
   });
 
+  // ---------- Venda Diária ----------
+
+  function calcTotalVendaAtual() {
+    return parseValor(document.getElementById('vdCredito').value || '0')
+      + parseValor(document.getElementById('vdDebito').value || '0')
+      + parseValor(document.getElementById('vdRefeicao').value || '0')
+      + parseValor(document.getElementById('vdDinheiro').value || '0')
+      + parseValor(document.getElementById('vdPix').value || '0')
+      + parseValor(document.getElementById('vdFiado').value || '0')
+      + parseValor(document.getElementById('vdIfood').value || '0');
+  }
+
+  function updateVendaPreview() {
+    const total = calcTotalVendaAtual();
+    document.getElementById('vdTotalPreview').textContent = isNaN(total) ? '' : `Total Vendas: ${fmtBRL(total)}`;
+  }
+
+  ['vdCredito', 'vdDebito', 'vdRefeicao', 'vdDinheiro', 'vdPix', 'vdFiado', 'vdIfood'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateVendaPreview);
+  });
+
+  function setVdStatus(msg, type) {
+    const el = document.getElementById('vdStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+
+  function renderVendaView(empresa) {
+    document.getElementById('vendaTitle').textContent = `Venda Diária — ${empresa}`;
+    updateVendaPreview();
+
+    const rows = vendas.filter(v => v.empresa === empresa).sort((a, b) => brToISO(b.data).localeCompare(brToISO(a.data)));
+
+    const totalVendas = rows.reduce((s, r) => s + r.totalVendas, 0);
+    const totalPessoas = rows.reduce((s, r) => s + r.pessoas, 0);
+    const totalFichas = rows.reduce((s, r) => s + r.fichas, 0);
+    const ticketMedio = totalPessoas > 0 ? totalVendas / totalPessoas : 0;
+    document.getElementById('cardsVenda').innerHTML = `
+      <div class="card total"><div class="label">Total Vendas</div><div class="value">${fmtBRL(totalVendas)}</div></div>
+      <div class="card"><div class="label">Total de Pessoas</div><div class="value">${totalPessoas}</div></div>
+      <div class="card"><div class="label">Total de Fichas</div><div class="value">${totalFichas}</div></div>
+      <div class="card"><div class="label">Ticket Médio</div><div class="value">${fmtBRL(ticketMedio)}</div></div>
+    `;
+
+    const tbody = document.getElementById('vdTbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="15" class="empty-msg">Nenhuma venda lançada ainda.</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.data}</td>
+          <td class="num">${fmtBRL(r.credito)}</td>
+          <td class="num">${fmtBRL(r.debito)}</td>
+          <td class="num">${fmtBRL(r.refeicao)}</td>
+          <td class="num">${fmtBRL(r.dinheiro)}</td>
+          <td class="num">${fmtBRL(r.pix)}</td>
+          <td class="num">${fmtBRL(r.fiado)}</td>
+          <td class="num">${fmtBRL(r.ifood)}</td>
+          <td class="num">${fmtBRL(r.caixaInicial)}</td>
+          <td class="num">${fmtBRL(r.retirada)}</td>
+          <td class="num">${fmtBRL(r.caixa)}</td>
+          <td class="num" style="font-weight:700">${fmtBRL(r.totalVendas)}</td>
+          <td class="num">${r.pessoas}</td>
+          <td class="num">${r.fichas}</td>
+          <td class="actions-col"><button class="btn-icon btn-delete-venda" data-id="${r.id}" title="Excluir venda">🗑️</button></td>
+        </tr>`).join('');
+    }
+  }
+
+  async function handleAddVenda() {
+    if (!currentVendaEmpresa) return;
+    const dataEl = document.getElementById('vdData');
+    const totalVendas = calcTotalVendaAtual();
+    if (isNaN(totalVendas)) { setVdStatus('Confira os valores digitados.', 'error'); return; }
+
+    const nova = {
+      empresa: currentVendaEmpresa,
+      data: isoToBR(dataEl.value || new Date().toISOString().slice(0, 10)),
+      credito: parseValor(document.getElementById('vdCredito').value || '0'),
+      debito: parseValor(document.getElementById('vdDebito').value || '0'),
+      refeicao: parseValor(document.getElementById('vdRefeicao').value || '0'),
+      dinheiro: parseValor(document.getElementById('vdDinheiro').value || '0'),
+      pix: parseValor(document.getElementById('vdPix').value || '0'),
+      fiado: parseValor(document.getElementById('vdFiado').value || '0'),
+      ifood: parseValor(document.getElementById('vdIfood').value || '0'),
+      caixaInicial: parseValor(document.getElementById('vdCaixaInicial').value || '0'),
+      retirada: parseValor(document.getElementById('vdRetirada').value || '0'),
+      caixa: parseValor(document.getElementById('vdCaixa').value || '0'),
+      totalVendas: totalVendas,
+      pessoas: parseInt(document.getElementById('vdPessoas').value || '0', 10) || 0,
+      fichas: parseInt(document.getElementById('vdFichas').value || '0', 10) || 0
+    };
+
+    setVdStatus('Salvando...');
+    const { data: inserted, error } = await sb.from('vendas_diarias').insert([toDbVendaInsert(nova)]).select();
+    if (error) { setVdStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    upsertLocalVenda(fromDbVenda(inserted[0]));
+    renderVendaView(currentVendaEmpresa);
+    setVdStatus('Venda lançada com sucesso.', 'ok');
+
+    ['vdCredito', 'vdDebito', 'vdRefeicao', 'vdDinheiro', 'vdPix', 'vdFiado', 'vdIfood',
+     'vdCaixaInicial', 'vdRetirada', 'vdCaixa', 'vdPessoas', 'vdFichas'].forEach(id => document.getElementById(id).value = '');
+    updateVendaPreview();
+  }
+
+  async function handleDeleteVenda(id) {
+    const row = vendas.find(v => v.id === id);
+    if (!row) return;
+    const ok = confirm(`Excluir esta venda?\n\n${row.empresa} — ${row.data}\nTotal Vendas: ${fmtBRL(row.totalVendas)}`);
+    if (!ok) return;
+    setVdStatus('Excluindo...');
+    const { error } = await sb.from('vendas_diarias').delete().eq('id', id);
+    if (error) { setVdStatus('Erro ao excluir: ' + error.message, 'error'); return; }
+    removeLocalVenda(id);
+    renderVendaView(currentVendaEmpresa);
+    setVdStatus('Venda excluída com sucesso.', 'ok');
+  }
+
+  document.getElementById('btnAddVenda').addEventListener('click', handleAddVenda);
+  document.getElementById('vdTbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-venda');
+    if (!btn) return;
+    handleDeleteVenda(btn.dataset.id);
+  });
+
+  // ---------- Permissões (controle de acesso) ----------
+
+  function setPermStatus(msg, type) {
+    const el = document.getElementById('permStatus');
+    el.textContent = msg;
+    el.className = 'file-status' + (type ? ' ' + type : '');
+  }
+
+  function renderPermissoes() {
+    const tbody = document.getElementById('permTbody');
+    if (perfis.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="3" class="empty-msg">Ninguém está restrito — todos com login têm acesso completo.</td></tr>`;
+    } else {
+      tbody.innerHTML = perfis.map(p => `
+        <tr>
+          <td>${p.email}</td>
+          <td><span class="badge">${p.empresaLiberada || 'Acesso completo'}</span></td>
+          <td class="actions-col"><button class="btn-icon btn-delete-perm" data-email="${p.email}" title="Remover restrição">🗑️</button></td>
+        </tr>`).join('');
+    }
+  }
+
+  async function handleAddPerm() {
+    const emailEl = document.getElementById('permEmail');
+    const empresaEl = document.getElementById('permEmpresa');
+    const email = emailEl.value.trim().toLowerCase();
+    const empresa = empresaEl.value;
+    if (!email) { setPermStatus('Informe o e-mail da pessoa.', 'error'); return; }
+
+    setPermStatus('Salvando...');
+    const { data: upserted, error } = await sb.from('perfis').upsert([{ email, empresa_liberada: empresa }], { onConflict: 'email' }).select();
+    if (error) { setPermStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    const idx = perfis.findIndex(p => p.email === email);
+    const row = fromDbPerfil(upserted[0]);
+    if (idx === -1) perfis.push(row); else perfis[idx] = row;
+    renderPermissoes();
+    setPermStatus(`Acesso de ${email} restrito a ${empresa}. Vale a partir do próximo login dela.`, 'ok');
+    emailEl.value = '';
+  }
+
+  async function handleRemovePerm(email) {
+    const ok = confirm(`Remover a restrição de "${email}"? Ela passará a ter acesso completo ao painel no próximo login.`);
+    if (!ok) return;
+    setPermStatus('Removendo...');
+    const { error } = await sb.from('perfis').delete().eq('email', email);
+    if (error) { setPermStatus('Erro ao remover: ' + error.message, 'error'); return; }
+    perfis = perfis.filter(p => p.email !== email);
+    renderPermissoes();
+    setPermStatus('Restrição removida com sucesso.', 'ok');
+  }
+
+  document.getElementById('btnAddPerm').addEventListener('click', handleAddPerm);
+  document.getElementById('permTbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-perm');
+    if (!btn) return;
+    handleRemovePerm(btn.dataset.email);
+  });
+
   // ---------- Abas (Despesas / Recebimentos / Resumo Mensal) ----------
 
   function computeByMonth(list, dateOf) {
@@ -1327,10 +1724,14 @@
       document.getElementById('viewDespesas').style.display = view === 'despesas' ? '' : 'none';
       document.getElementById('viewRecebimentos').style.display = view === 'recebimentos' ? '' : 'none';
       document.getElementById('viewContas').style.display = view === 'contas' ? '' : 'none';
+      document.getElementById('viewVenda').style.display = view === 'venda' ? '' : 'none';
       document.getElementById('viewResumo').style.display = view === 'resumo' ? '' : 'none';
+      document.getElementById('viewPermissoes').style.display = view === 'permissoes' ? '' : 'none';
       if (view === 'recebimentos') renderRecebimentos();
       if (view === 'contas') { renderContas(); renderSaldos(); }
+      if (view === 'venda') { currentVendaEmpresa = btn.dataset.empresa; renderVendaView(currentVendaEmpresa); }
       if (view === 'resumo') renderResumo();
+      if (view === 'permissoes') renderPermissoes();
     });
   });
 
