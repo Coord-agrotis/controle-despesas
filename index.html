@@ -1313,8 +1313,11 @@
   }
 
   function parseRelatorioLine(line) {
-    const dateMatch = line.match(/\d{2}\/\d{2}\/\d{4}/);
-    if (!dateMatch) return null;
+    // Usa a ÚLTIMA data dd/mm/aaaa da linha, não a primeira: a Descrição pode conter
+    // datas embutidas (ex: período de férias), que apareceriam antes da Data de Vencimento real.
+    const dateMatches = [...line.matchAll(/\d{2}\/\d{2}\/\d{4}/g)];
+    if (dateMatches.length === 0) return null;
+    const dateMatch = dateMatches[dateMatches.length - 1];
     const dataVencimento = dateMatch[0];
     const afterDate = line.slice(dateMatch.index + dataVencimento.length);
     const currencyRe = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
@@ -1327,11 +1330,15 @@
 
     const beforeDate = line.slice(0, dateMatch.index).trim();
     const cnpjMatch = beforeDate.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+    // Fornecedores pessoa física têm CPF em vez de CNPJ — usa o CPF como separador
+    // entre Fornecedor e Descrição nesse caso.
+    const cpfMatch = !cnpjMatch ? beforeDate.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/) : null;
+    const idMatch = cnpjMatch || cpfMatch;
     let fornecedor, descricao, cnpj;
-    if (cnpjMatch) {
-      fornecedor = beforeDate.slice(0, cnpjMatch.index).trim();
-      descricao = beforeDate.slice(cnpjMatch.index + cnpjMatch[0].length).trim();
-      cnpj = cnpjMatch[0];
+    if (idMatch) {
+      fornecedor = beforeDate.slice(0, idMatch.index).trim();
+      descricao = beforeDate.slice(idMatch.index + idMatch[0].length).trim();
+      cnpj = cnpjMatch ? cnpjMatch[0] : '';
     } else {
       fornecedor = beforeDate;
       descricao = '';
