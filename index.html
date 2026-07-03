@@ -89,6 +89,11 @@
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
+  td.descricao-col {
+    white-space: normal;
+    min-width: 260px;
+    max-width: 420px;
+  }
   tbody tr:hover { background: #fafbfc; }
   td.num, th.num { text-align: right; }
   .badge {
@@ -732,7 +737,7 @@
           <td><span class="badge">${r.empresa}</span></td>
           <td>${r.fornecedor}</td>
           <td>${r.cnpj}</td>
-          <td>${r.descricao}</td>
+          <td class="descricao-col">${r.descricao}</td>
           <td>${r.dataVencimento}</td>
           <td>${r.situacao}</td>
           <td class="num">${fmtBRL(r.valor)}</td>
@@ -1343,10 +1348,13 @@
     const buf = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({ data: buf }).promise;
     const rows = [];
+    const allLines = [];
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
       const textContent = await page.getTextContent();
-      for (const line of linesFromTextContent(textContent)) {
+      const lines = linesFromTextContent(textContent);
+      allLines.push(...lines);
+      for (const line of lines) {
         const parsed = parseRelatorioLine(line);
         if (parsed) rows.push(parsed);
       }
@@ -1354,7 +1362,7 @@
     if (rows.length === 0) throw new Error('Nenhuma despesa reconhecida neste PDF. Confira se é um "Relatório de contas a pagar".');
     const empresa = empresaFromFilename(file.name);
     const hoje = todayBR();
-    return rows.map(r => ({
+    const mapped = rows.map(r => ({
       empresa,
       fornecedor: r.fornecedor,
       cnpj: r.cnpj,
@@ -1365,6 +1373,15 @@
       dataImportacao: hoje,
       arquivoOrigem: file.name
     }));
+
+    const countMatch = allLines.join(' ').match(/(\d+)\s+cobranças no período/i);
+    if (countMatch) {
+      const esperado = parseInt(countMatch[1], 10);
+      if (esperado !== mapped.length) {
+        mapped.warning = `Atenção: o PDF indica ${esperado} cobrança(s), mas só ${mapped.length} foi(ram) reconhecida(s). Confira o PDF e lance a que faltou manualmente se precisar.`;
+      }
+    }
+    return mapped;
   }
 
   async function handleImportFile(file) {
@@ -1387,7 +1404,11 @@
       populateFilter();
       render();
       updateLastUpdate();
-      setStatus(`${inserted.length} despesa(s) importada(s) com sucesso.`, 'ok');
+      if (newRows.warning) {
+        setStatus(`${inserted.length} despesa(s) importada(s). ${newRows.warning}`, 'error');
+      } else {
+        setStatus(`${inserted.length} despesa(s) importada(s) com sucesso.`, 'ok');
+      }
     } catch (err) {
       console.error(err);
       setStatus('Erro ao importar: ' + err.message, 'error');
