@@ -325,26 +325,30 @@
 
 <div id="viewContas" class="view" style="display:none">
 
-  <h2 style="margin:8px 0 14px;font-size:18px;">Contas cadastradas</h2>
-  <div class="toolbar">
-    <input type="text" id="ctEmpresa" placeholder="Empresa" list="empresaList" style="width:150px;min-width:150px">
-    <input type="text" id="ctBanco" placeholder="Banco" style="width:170px;min-width:170px">
-    <input type="text" id="ctLimite" placeholder="Limite (ex: 5000,00)" style="width:170px;min-width:170px">
-    <button class="btn btn-primary" id="btnAddConta">➕ Adicionar conta</button>
-  </div>
-  <div class="hint" id="ctStatus">Cadastre cada conta bancária (uma empresa pode ter mais de uma conta/banco).</div>
+  <details style="margin-bottom:24px;">
+    <summary style="cursor:pointer;font-size:15px;font-weight:600;color:var(--muted);padding:6px 0;">⚙️ Gerenciar contas cadastradas</summary>
+    <div style="margin-top:12px;">
+      <div class="toolbar">
+        <input type="text" id="ctEmpresa" placeholder="Empresa" list="empresaList" style="width:150px;min-width:150px">
+        <input type="text" id="ctBanco" placeholder="Banco" style="width:170px;min-width:170px">
+        <input type="text" id="ctLimite" placeholder="Limite (ex: 5000,00)" style="width:170px;min-width:170px">
+        <button class="btn btn-primary" id="btnAddConta">➕ Adicionar conta</button>
+      </div>
+      <div class="hint" id="ctStatus">Cadastre cada conta bancária (uma empresa pode ter mais de uma conta/banco).</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Empresa</th>
-        <th>Banco</th>
-        <th class="num">Limite</th>
-        <th class="actions-col">Ações</th>
-      </tr>
-    </thead>
-    <tbody id="ctTbody"></tbody>
-  </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>Banco</th>
+            <th class="num">Limite</th>
+            <th class="actions-col">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="ctTbody"></tbody>
+      </table>
+    </div>
+  </details>
 
   <h2 style="margin:32px 0 14px;font-size:18px;">Saldos diários</h2>
   <div class="toolbar">
