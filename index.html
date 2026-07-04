@@ -257,6 +257,26 @@
 </div>
 <div class="hint" id="fileStatus">Importe direto o PDF "Relatório de contas a pagar" (ou um CSV no modelo). Os dados ficam no banco compartilhado e aparecem para todos na hora.</div>
 
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);padding:6px 0;">➕ Adicionar despesa manualmente</summary>
+  <div class="toolbar" style="margin-top:10px;flex-wrap:wrap;">
+    <input type="text" id="pgEmpresa" placeholder="Empresa" list="empresaList" style="width:140px;min-width:140px">
+    <input type="text" id="pgFornecedor" placeholder="Fornecedor" style="min-width:200px">
+    <input type="text" id="pgCnpj" placeholder="CNPJ (opcional)" style="width:150px;min-width:150px">
+    <input type="text" id="pgDescricao" placeholder="Descrição" style="min-width:200px">
+    <input type="date" id="pgVencimento" title="Data de vencimento">
+    <select id="pgSituacao">
+      <option value="Em aberto">Em aberto</option>
+      <option value="Pago">Pago</option>
+      <option value="Confirmado">Confirmado</option>
+      <option value="Atrasado">Atrasado</option>
+    </select>
+    <input type="text" id="pgValor" placeholder="Valor (ex: 1234,56)" style="width:140px;min-width:140px">
+    <button class="btn btn-primary" id="btnAddDespesaManual">➕ Adicionar</button>
+  </div>
+  <div class="hint" id="pgStatus"></div>
+</details>
+
 <div class="bulk-bar" id="bulkBar">
   <span id="bulkCount"></span>
   <button class="btn btn-danger" id="btnBulkDelete">🗑️ Excluir selecionadas</button>
@@ -1971,6 +1991,61 @@
     if (!btn) return;
     handleDelete(btn.dataset.id);
   });
+
+  function setPgStatus(msg, type) {
+    const el = document.getElementById('pgStatus');
+    el.textContent = msg;
+    el.className = 'hint' + (type ? ' ' + type : '');
+  }
+
+  async function handleAddDespesaManual() {
+    const empresaEl = document.getElementById('pgEmpresa');
+    const fornecedorEl = document.getElementById('pgFornecedor');
+    const cnpjEl = document.getElementById('pgCnpj');
+    const descricaoEl = document.getElementById('pgDescricao');
+    const vencimentoEl = document.getElementById('pgVencimento');
+    const situacaoEl = document.getElementById('pgSituacao');
+    const valorEl = document.getElementById('pgValor');
+
+    const empresa = empresaEl.value.trim().toUpperCase();
+    const fornecedor = fornecedorEl.value.trim();
+    const valor = parseValor(valorEl.value);
+    const dataVencimento = isoToBR(vencimentoEl.value || new Date().toISOString().slice(0, 10));
+
+    if (!empresa || !fornecedor || isNaN(valor)) {
+      setPgStatus('Preencha ao menos Empresa, Fornecedor e um Valor válido.', 'error');
+      return;
+    }
+
+    const nova = {
+      empresa,
+      fornecedor,
+      cnpj: cnpjEl.value.trim(),
+      descricao: descricaoEl.value.trim(),
+      dataVencimento,
+      situacao: situacaoEl.value,
+      valor,
+      dataImportacao: todayBR(),
+      arquivoOrigem: 'Lançamento manual'
+    };
+
+    setPgStatus('Salvando...');
+    const { data: inserted, error } = await sb.from('despesas').insert([toDbDespesaInsert(nova)]).select();
+    if (error) { setPgStatus('Erro ao salvar: ' + error.message, 'error'); return; }
+    upsertLocalDespesa(fromDbDespesa(inserted[0]));
+    populateFilter();
+    render();
+    updateLastUpdate();
+    setPgStatus('Despesa adicionada com sucesso.', 'ok');
+
+    fornecedorEl.value = '';
+    cnpjEl.value = '';
+    descricaoEl.value = '';
+    vencimentoEl.value = '';
+    valorEl.value = '';
+  }
+
+  document.getElementById('btnAddDespesaManual').addEventListener('click', handleAddDespesaManual);
 
   document.getElementById('btnImport').addEventListener('click', () => document.getElementById('fileInput').click());
   document.getElementById('fileInput').addEventListener('change', (e) => {
